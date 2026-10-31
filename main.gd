@@ -6600,6 +6600,10 @@ func brief_ev_lines() -> Array:
 func ev_auto(u) -> bool:
 	if not evtest or not ev_active() or u.team != 0: return false
 	var goal := Vector2i(-1, -1)
+	if ev.kind == "seal" and not ev_state.get("triggered", false) and u.name != ev.who and round_no <= 8:
+		# 測試用：封印石觸發前其餘隊員原地待命，避免戰鬥在米菈抵達前結束
+		if cur == u and state == "menu": cmd_wait()
+		return true
 	match ev.kind:
 		"talk":
 			if u.name != ev.who: return false

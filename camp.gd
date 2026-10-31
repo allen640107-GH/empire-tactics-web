@@ -241,7 +241,7 @@ func show_title() -> void:
 		var mm := tl(G.migrate_msg, 20, Color(0.7, 1.0, 0.7)); mm.size = Vector2(1600, 30); mm.position = Vector2(0, 20); glow_lbl(mm, Color(0, 0, 0, 0.8), 6); page.add_child(mm)
 	var cur := TextureRect.new(); cur.texture = load("res://assets/v15/cursor.png"); cur.size = Vector2(48, 36); cur.expand_mode = TextureRect.EXPAND_IGNORE_SIZE; cur.mouse_filter = Control.MOUSE_FILTER_IGNORE; page.add_child(cur); t_nodes.cur = cur
 	var hint := tl("↑↓ 或滑鼠選擇　　Enter／點擊 決定", 18, Color(0.85, 0.75, 0.55, 0.8)); hint.size = Vector2(1600, 26); hint.position = Vector2(0, 852); glow_lbl(hint, Color(0, 0, 0, 0.8), 6); page.add_child(hint); t_nodes.hint = hint
-	var ver := lbl("v22　©金陽旗工作室", 15, Color(0.8, 0.7, 0.5, 0.6)); ver.position = Vector2(1400, 866); page.add_child(ver)
+	var ver := lbl("v23　©金陽旗工作室", 15, Color(0.8, 0.7, 0.5, 0.6)); ver.position = Vector2(1400, 866); page.add_child(ver)
 	# 進場：黑幕淡出、標誌浮現、選單滑入
 	var f := fader(1.0)
 	logo.modulate.a = 0.0; logo.scale = Vector2(1.06, 1.06); fr.modulate.a = 0.0; fr.position.y = fr_y + 40; cur.modulate.a = 0.0; hint.modulate.a = 0.0
