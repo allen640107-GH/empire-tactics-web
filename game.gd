@@ -276,6 +276,7 @@ func setup_for_battle(n: int) -> void:
 	keyitems = []
 	if n >= 5: keyitems.append(SUMMON_ITEM)
 	if n >= 9: keyitems.append(KEY_ITEM)
+	if n >= 12 and "--withadam" in OS.get_cmdline_user_args(): keyitems.append(SUMMON3_ITEM); print("WITHADAM ", keyitems)   # 測試：亞達曼展示
 	var bi := 0
 	for m in roster:
 		var br := "a" if (bi + n) % 2 == 0 else "b"; bi += 1

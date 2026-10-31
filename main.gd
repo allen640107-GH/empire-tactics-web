@@ -283,6 +283,7 @@ func _ready() -> void:
 		if a == "--evtest": evtest = true
 		if a == "--wxonly": wx_only = true
 		if a == "--lightshot": light_shot = true
+		if a == "--settleshot": settle_shot = true
 		if a == "--promoview": promo_view = true
 		if a.begins_with("--battle="): bidx = clampi(int(a.substr(9)) - 1, 0, 15)
 	if OS.has_environment("SRPG_TRACE"): printerr("STAGE font")
@@ -2652,6 +2653,8 @@ func do_attack(a, d) -> void:
 func kill(u) -> void:
 	if evtest and u.alive and ev_active() and (u.get("npc", false) or (u.team == 0 and u.name == str(ev.get("who", "")))):
 		u.hp = 1; update_label(u); print("EVTEST guard ", u.name); return
+	if evtest and u.alive and u.team == 1 and ev_active() and ev.kind == "seal" and not ev_state.get("triggered", false) and alive_team(1).size() <= 1:
+		u.hp = 1; update_label(u); print("EVTEST guard last enemy ", u.name); return
 	if u.alive and eff(u, "endure") > 0 and not u.get("endured", false):
 		u.endured = true; u.hp = 1; update_label(u)
 		popup(u.node.position + Vector3(0, 0.8, 0), "不屈！", Color(1, 0.85, 0.3), true)
@@ -3003,6 +3006,15 @@ func auto_player(u) -> void:
 		print("EVAUTO ", u.name, " cell=", u.cell, " goal=", ev_cell, " active=", ev_active(), " round=", round_no)
 		if not acted and await ev_auto(u): return
 		if cur != u or state == "over": return
+	if "--withadam" in OS.get_cmdline_user_args() and not acted and not fx_shots.has("adam_done") and u.job == "召喚師" and G.has_adam() and u.mp >= adam_cost(u):
+		var ac0 = adam_plan(u)
+		if ac0 != null:
+			fx_shots["adam_done"] = true; print("ADAM SHOWCASE ", u.name, " at ", ac0)
+			cmd_summon_adam(); on_hover(ac0); await wait(0.4)
+			await on_cell_clicked(ac0)
+			if state == "over": return
+			if state == "menu": cmd_wait()
+			return
 	if not equip_tested and u.member != null and allowed_weapons(u).size() > 1:
 		equip_tested = true
 		cmd_equip(); await wait(0.6)
@@ -3336,6 +3348,17 @@ func run_autotest() -> void:
 		c /= maxf(1.0, pl.size())
 		cam_pivot.position = c + Vector3(0, 0.8, 0); target_dist = 9.0; cam_dist = 9.0; update_cam()
 		await wait(2.0); await shot("30_promo_party"); get_tree().quit(); return
+	if settle_shot:
+		# 聚落特寫（敵方側右下角）＋全圖俯瞰，並量測 FPS
+		cam_pivot.position = cell_pos(Vector2i(W - 2, H - 2)) + Vector3(0, 0.6, 0); target_yaw = 30.0; yaw = 30.0; target_dist = 10.0; cam_dist = 10.0; target_pitch = 30.0; pitch = 30.0; update_cam()
+		await wait(2.5); await shot("23_settle_b%02d_%s" % [bidx + 1, SETTLE.get(bidx, "outpost")])
+		cam_pivot.position = cell_pos(Vector2i(W / 2, H / 2)); target_dist = 30.0; cam_dist = 30.0; target_pitch = 55.0; pitch = 55.0; update_cam()
+		await wait(1.5); await shot("23_map_b%02d_%dx%d" % [bidx + 1, W, H])
+		var ss := 0.0
+		for k in 6:
+			await wait(0.5); ss += Engine.get_frames_per_second()
+		print("SETTLE battle=%d size=%dx%d fps=%.1f" % [bidx + 1, W, H, ss / 6.0])
+		get_tree().quit(); return
 	if light_shot:
 		var lp := players(); var lc := Vector3.ZERO
 		for q in lp: lc += q.node.position
@@ -4635,6 +4658,7 @@ var wx_kind := "clear"
 var wx_force := ""
 var wx_only := false
 var light_shot := false
+var settle_shot := false
 var wx_idx := 0
 var wx_round := 0
 var wx_tick := 0
@@ -6596,11 +6620,25 @@ func brief_ev_lines() -> Array:
 			o.append("◇ 遺落　" + str(EVENTS[k].miss)); break
 	return o
 
+# 測試用：地形 BFS 距離（忽略單位），避免被牆或高低差卡住
+func ev_goal_dist(goal: Vector2i, jp: int) -> Dictionary:
+	var dist := {goal: 0}; var q := [goal]
+	while q.size() > 0:
+		var c: Vector2i = q.pop_front()
+		for dd in DIRS:
+			var n: Vector2i = c + dd
+			if not inside(n) or dist.has(n) or n in ROCK_CELLS or n in LAVA_CELLS: continue
+			if abs(heights[n] - heights[c]) > jp: continue
+			var ob = unit_at(n)
+			if ob != null and ob.team != 0 and n != goal: continue
+			dist[n] = dist[c] + 1; q.append(n)
+	return dist
+
 # 自動測試：--evtest 讓負責的角色前往觸發點
 func ev_auto(u) -> bool:
 	if not evtest or not ev_active() or u.team != 0: return false
 	var goal := Vector2i(-1, -1)
-	if ev.kind == "seal" and not ev_state.get("triggered", false) and u.name != ev.who and round_no <= 8:
+	if ev.kind == "seal" and not ev_state.get("triggered", false) and u.name != ev.who and round_no <= 3:
 		# 測試用：封印石觸發前其餘隊員原地待命，避免戰鬥在米菈抵達前結束
 		if cur == u and state == "menu": cmd_wait()
 		return true
@@ -6608,7 +6646,9 @@ func ev_auto(u) -> bool:
 		"talk":
 			if u.name != ev.who: return false
 			if can_talk(u) != null:
-				state = "menu"; await cmd_talk(); return true
+				state = "menu"; await cmd_talk()
+				if cur == u and state == "menu": cmd_wait()
+				return true
 			for o in alive_team(1):
 				if o.get("npc", false): goal = o.cell
 		"reach", "seal":
@@ -6618,15 +6658,18 @@ func ev_auto(u) -> bool:
 			goal = ev_cell
 	if goal.x < 0 or moved: return false
 	var r := reachable(u)
-	var bc: Vector2i = u.cell; var bd := mdist(u.cell, goal)
+	var gd := ev_goal_dist(goal, st(u, "jump"))
+	var bc: Vector2i = u.cell; var bd: int = gd.get(u.cell, 999)
 	for e in r.ends:
 		if unit_at(e) != null and e != u.cell: continue
-		var d := mdist(e, goal)
+		var d: int = gd.get(e, 999)
 		if d < bd or (d == bd and e == goal): bd = d; bc = e
 	if bc == u.cell: return false
 	cmd_move(); await wait(0.25); await on_cell_clicked(bc)
 	if state == "over": return true
 	if ev.kind == "talk" and can_talk(u) != null and not acted:
-		await cmd_talk(); return true
+		await cmd_talk()
+		if cur == u and state == "menu": cmd_wait()
+		return true
 	if cur == u and state == "menu": cmd_wait()
 	return true
