@@ -27,6 +27,7 @@ var boss_phase := 0
 var do_shots := false
 var levelup_shot_done := false
 var item_shot_done := false
+var ally_item_test := false
 var boss_shot_done := false
 var item_tested := {}
 var sel_item := ""
@@ -281,6 +282,7 @@ func _ready() -> void:
 		if a.begins_with("--wx="): wx_force = a.substr(5)
 		if a == "--menushot": menu_shot = true
 		if a == "--evtest": evtest = true
+		if a == "--allyitem": ally_item_test = true; autotest = true
 		if a == "--wxonly": wx_only = true
 		if a == "--lightshot": light_shot = true
 		if a == "--settleshot": settle_shot = true
@@ -1903,8 +1905,17 @@ func pick_item(k: String) -> void:
 	for c in heights:
 		if item_target_ok(k, c): cells.append(c)
 	hide_menu()
-	show_hl(cells, Color(0.4, 0.9, 1.0, 0.45)); state = "item"
-	log_msg("使用 %s：%s（選擇目標）" % [k, G.I[k].desc])
+	# v25：對隊友（含自己）使用時以綠色標示可選目標
+	var ally: bool = G.I[k].target in ["ally", "dead"]
+	show_hl(cells, Color(0.3, 1.0, 0.4, 0.6) if ally else Color(0.4, 0.9, 1.0, 0.45)); state = "item"
+	if ally:
+		for c in cells:
+			var lb := Label3D.new(); lb.text = "▼ 使用"; lb.font_size = 56; lb.outline_size = 14
+			lb.modulate = Color(0.35, 1.0, 0.45); lb.outline_modulate = Color(0, 0.2, 0.05)
+			lb.billboard = BaseMaterial3D.BILLBOARD_ENABLED; lb.no_depth_test = true; lb.render_priority = 10
+			lb.position = cell_pos(c) + Vector3(0, 2.3, 0); add_child(lb); hl_nodes.append(lb)
+			var tw := lb.create_tween().set_loops(); tw.tween_property(lb, "position:y", lb.position.y + 0.25, 0.4); tw.tween_property(lb, "position:y", lb.position.y, 0.4)
+	log_msg(("使用 %s：%s（點選綠色格子：自己或相鄰隊友）" if ally else "使用 %s：%s（選擇目標）") % [k, G.I[k].desc])
 
 func do_item(u, k: String, c: Vector2i) -> void:
 	var d: Dictionary = G.I[k]
@@ -3026,6 +3037,29 @@ func auto_use_item(u, k: String, c: Vector2i) -> bool:
 # 自動測試：玩家單位透過與滑鼠相同的指令流程操作
 func auto_player(u) -> void:
 	await wait(0.4)
+	if ally_item_test and u.team == 0:
+		ally_item_test = false
+		G.items["回復藥"] = 3
+		var tgt = null
+		for o in alive_team(0):
+			if o != u and mdist(o.cell, u.cell) == 1: tgt = o
+		if tgt == null:
+			for o in alive_team(0):
+				if o != u:
+					for c in heights:
+						if mdist(c, o.cell) == 1 and unit_at(c) == null and abs(c.x - u.cell.x) + abs(c.y - u.cell.y) <= 6:
+							units.erase(u); u.cell = c; u.node.position = cell_pos(c); units.append(u); tgt = o; break
+				if tgt != null: break
+		tgt.hp = maxi(1, tgt.hp - 40); update_label(tgt)
+		var h0: int = tgt.hp
+		cmd_item(); await wait(0.5); await shot_to(shots_dir + "/v25_item_menu.png")
+		pick_item("回復藥"); on_hover(tgt.cell); await wait(0.8)
+		print("ALLYITEM cells=%s target_ok=%s self_ok=%s" % [str(hl_cells.size()), str(hl_cells.has(tgt.cell)), str(hl_cells.has(u.cell))])
+		await shot_to(shots_dir + "/v25_item_target_ally.png")
+		await on_cell_clicked(tgt.cell); await wait(1.0)
+		await shot_to(shots_dir + "/v25_item_used_on_ally.png")
+		print("ALLYITEM %s used on %s hp %d->%d" % [u.name, tgt.name, h0, tgt.hp])
+		print("ALLYITEM DONE"); get_tree().quit(); return
 	if do_shots and not menu_shot_done and u.team == 0:
 		menu_shot_done = true
 		state = "menu"; show_menu(); await wait(0.8)
@@ -6706,3 +6740,7 @@ func ev_auto(u) -> bool:
 		return true
 	if cur == u and state == "menu": cmd_wait()
 	return true
+
+func shot_to(p: String) -> void:
+	await RenderingServer.frame_post_draw
+	get_viewport().get_texture().get_image().save_png(p)

@@ -50,6 +50,7 @@ func _ready() -> void:
 		if a == "--savetest21": save_test21(); return
 		if a.begins_with("--savetest23="): save_test23(a.substr(13)); return
 		if a == "--saveshots": save_shots(); return
+		if a.begins_with("--shoptest25="): shot_dir = a.substr(13); shop_test25.call_deferred(); return
 		if a.begins_with("--titledemo"): demo = a.substr(12) if a.length() > 12 else "title"
 		if a == "--autotest" or a == "--touchtest" or a.begins_with("--battle="):
 			get_tree().change_scene_to_file.call_deferred("res://main.tscn"); return
@@ -241,7 +242,7 @@ func show_title() -> void:
 		var mm := tl(G.migrate_msg, 20, Color(0.7, 1.0, 0.7)); mm.size = Vector2(1600, 30); mm.position = Vector2(0, 20); glow_lbl(mm, Color(0, 0, 0, 0.8), 6); page.add_child(mm)
 	var cur := TextureRect.new(); cur.texture = load("res://assets/v15/cursor.png"); cur.size = Vector2(48, 36); cur.expand_mode = TextureRect.EXPAND_IGNORE_SIZE; cur.mouse_filter = Control.MOUSE_FILTER_IGNORE; page.add_child(cur); t_nodes.cur = cur
 	var hint := tl("↑↓ 或滑鼠選擇　　Enter／點擊 決定", 18, Color(0.85, 0.75, 0.55, 0.8)); hint.size = Vector2(1600, 26); hint.position = Vector2(0, 852); glow_lbl(hint, Color(0, 0, 0, 0.8), 6); page.add_child(hint); t_nodes.hint = hint
-	var ver := lbl("v24　©金陽旗工作室", 15, Color(0.8, 0.7, 0.5, 0.6)); ver.position = Vector2(1400, 866); page.add_child(ver)
+	var ver := lbl("v25　©金陽旗工作室", 15, Color(0.8, 0.7, 0.5, 0.6)); ver.position = Vector2(1400, 866); page.add_child(ver)
 	# 進場：黑幕淡出、標誌浮現、選單滑入
 	var f := fader(1.0)
 	logo.modulate.a = 0.0; logo.scale = Vector2(1.06, 1.06); fr.modulate.a = 0.0; fr.position.y = fr_y + 40; cur.modulate.a = 0.0; hint.modulate.a = 0.0
@@ -458,6 +459,7 @@ func show_camp() -> void:
 	hb.add_child(btn("商店", func(): show_shop(), 150))
 	hb.add_child(btn("隊伍・裝備", func(): show_party(), 180))
 	hb.add_child(btn("召喚獸", func(): show_summons(), 130))
+	hb.add_child(btn("道具", func(): show_items(), 130))
 	hb.add_child(btn("存檔", func(): G.save_game(); show_saves(true), 130))
 	var vb := btn("語音 %d%%" % int(round(G.voice_vol * 100)), func(): pass, 140)
 	vb.pressed.connect(func():
@@ -544,6 +546,39 @@ func who_can(nm: String) -> String:
 		if G.can_equip(m.job, kind, nm, m.get("hero", false)): o.append(m.name)
 	return ("可裝備：" + "、".join(o)) if o.size() > 0 else "（目前無人可裝備）"
 
+# v25：商店裝備比較（增加＝紅字、減少＝綠字，依 Allen 指定）
+var shop_who := 0   # -1 = 全員
+const CMP_KEYS := ["hp", "mp", "atk", "def", "mag", "spd", "move", "jump"]
+const CMP_NM := {"hp":"HP","mp":"MP","atk":"攻","def":"防","mag":"魔","spd":"速","move":"移","jump":"跳"}
+func gear_stats(m: Dictionary, wn: String, an: String) -> Dictionary:
+	var o := {}
+	var w: Dictionary = G.W.get(wn, {}); var a: Dictionary = G.A.get(an, {})
+	for k in CMP_KEYS: o[k] = int(m.base.get(k, 0)) + int(w.get(k, 0)) + int(a.get(k, 0))
+	return o
+
+func cmp_bb(m: Dictionary, nm: String) -> String:
+	var kind := "weapon" if G.W.has(nm) else "armor"
+	if not G.can_equip(m.job, kind, nm, m.get("hero", false)): return "[color=#555555]%s：無法裝備[/color]" % m.name
+	if m[kind] == nm: return "[color=#333333]%s：裝備中[/color]" % m.name
+	var cur := gear_stats(m, m.weapon, m.armor)
+	var nw := gear_stats(m, nm if kind == "weapon" else m.weapon, nm if kind == "armor" else m.armor)
+	var t := []
+	for k in CMP_KEYS:
+		var d: int = int(nw[k]) - int(cur[k])
+		if d > 0: t.append("[color=#d00000]%s▲%+d[/color]" % [CMP_NM[k], d])
+		elif d < 0: t.append("[color=#007a1f]%s▼%d[/color]" % [CMP_NM[k], d])
+	return "[color=#222222]%s：[/color]" % m.name + ("　".join(t) if t.size() > 0 else "[color=#333333]能力不變[/color]")
+
+func cmp_label(txt: String, k: float) -> RichTextLabel:
+	var r := RichTextLabel.new(); r.bbcode_enabled = true; r.fit_content = true; r.scroll_active = false
+	r.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; r.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	r.add_theme_font_size_override("normal_font_size", int(24 * k))
+	r.add_theme_constant_override("outline_size", maxi(3, int(4 * k))); r.add_theme_color_override("font_outline_color", Color(1, 0.98, 0.9))
+	var fv := FontVariation.new(); fv.base_font = r.get_theme_font("normal_font"); fv.variation_embolden = 0.9
+	r.add_theme_font_override("bold_font", fv); r.add_theme_font_size_override("bold_font_size", int(24 * k))
+	r.custom_minimum_size = Vector2(1400, 0); r.text = txt
+	return r
+
 func show_shop(tab := 0) -> void:
 	new_page()
 	header("商店　──　軍資金 %d G" % G.gold)
@@ -551,6 +586,14 @@ func show_shop(tab := 0) -> void:
 	var names := ["武器", "防具", "道具", "出售"]
 	for i in 4: tabs.add_child(btn(names[i], func(): show_shop(i), 130)); tabs.get_child(i).disabled = i == tab
 	tabs.add_child(btn("返回營地", func(): show_camp(), 160))
+	var fk := G.font_k()
+	if tab <= 1 and G.roster.size() > 0:
+		shop_who = clampi(shop_who, -1, G.roster.size() - 1)
+		var ch := HBoxContainer.new(); ch.position = Vector2(860, 76); page.add_child(ch)
+		ch.add_child(btn("◀", func(): shop_who = (shop_who + G.roster.size() + 1) % (G.roster.size() + 1) - 1; show_shop(tab), 64))
+		var who := lbl("比較：" + ("全員" if shop_who < 0 else str(G.roster[shop_who].name)), int(24 * fk), Color(0.1, 0.05, 0.0)); who.custom_minimum_size = Vector2(300, 44); who.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		ch.add_child(who)
+		ch.add_child(btn("▶", func(): shop_who = (shop_who + 2) % (G.roster.size() + 1) - 1; show_shop(tab), 64))
 	var p := panel(Vector2(40, 130), Vector2(1520, 720))
 	var sc := ScrollContainer.new(); sc.custom_minimum_size = Vector2(1490, 690); p.add_child(sc)
 	var v := VBoxContainer.new(); v.add_theme_constant_override("separation", 4); sc.add_child(v)
@@ -576,6 +619,15 @@ func show_shop(tab := 0) -> void:
 		var l := lbl(desc(nm), 18); l.custom_minimum_size = Vector2(580, 0); l.clip_text = true; h.add_child(l)
 		var l2 := lbl("" if G.I.has(nm) else who_can(nm), 15, Color(0.3, 0.3, 0.45)); l2.custom_minimum_size = Vector2(380, 0); l2.clip_text = true; h.add_child(l2)
 		h.add_child(lbl("持有 %d" % have, 16))
+		if tab <= 1:
+			var ms: Array = G.roster if shop_who < 0 else [G.roster[shop_who]]
+			var parts := []
+			for m in ms:
+				if shop_who < 0 and not G.can_equip(m.job, "weapon" if G.W.has(nm) else "armor", nm, m.get("hero", false)): continue
+				parts.append(cmp_bb(m, nm))
+			if parts.is_empty(): parts.append("[color=#555555]（目前無人可裝備）[/color]")
+			var vv := VBoxContainer.new(); row.remove_child(h); vv.add_child(h); row.add_child(vv)
+			vv.add_child(cmp_label("[b]" + "\n".join(parts) + "[/b]", fk))
 		if tab == 3:
 			h.add_child(btn("出售 %d G" % (G.price(nm) / 2), func(): G.sell(nm); show_shop(3), 170))
 		else:
@@ -1068,3 +1120,53 @@ func save_shots() -> void:
 	show_saves(false); await snap("s2_saves")
 	sv_box.text = G.export_code(G.read_json(G.latest_slot())) if G.has_save() else ""; sv_msg.text = "（示範）已匯出存檔碼"; await snap("s3_export")
 	get_tree().quit()
+
+
+# ---------- v25 營地道具：對任一隊員使用 ----------
+var item_sel := ""
+func show_items() -> void:
+	new_page()
+	var fk := G.font_k()
+	header("道具　──　選擇道具，再選擇要使用的隊員")
+	var bk := btn("返回營地", func(): show_camp(), 160); bk.position = Vector2(1380, 24); page.add_child(bk)
+	var sc := ScrollContainer.new(); sc.position = Vector2(40, 84); sc.size = Vector2(700, 800); page.add_child(sc)
+	var v := VBoxContainer.new(); v.add_theme_constant_override("separation", 6); sc.add_child(v)
+	if G.items.is_empty(): v.add_child(lbl("（沒有道具）", int(22 * fk)))
+	for k in G.items:
+		var b := btn("%s ×%d" % [k, int(G.items[k])], func(): item_sel = k; show_items(), 660)
+		b.add_theme_font_size_override("font_size", int(22 * fk)); b.disabled = k == item_sel; v.add_child(b)
+	var r := VBoxContainer.new(); r.position = Vector2(780, 84); r.size = Vector2(780, 800); r.add_theme_constant_override("separation", 8); page.add_child(r)
+	if item_sel == "" or not G.items.has(item_sel):
+		item_sel = ""
+		r.add_child(lbl("← 先選擇一個道具", int(24 * fk))); return
+	var d: Dictionary = G.I[item_sel]
+	var dl := lbl("%s：%s" % [item_sel, d.get("desc", "")], int(22 * fk)); dl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; dl.custom_minimum_size = Vector2(760, 0); r.add_child(dl)
+	if d.eff != "exp":
+		var nl := lbl("此道具在戰鬥中使用：選「道具」後，可對自己或相鄰的隊友使用（營地中隊員皆為滿狀態）。", int(20 * fk), Color(0.5, 0.15, 0.05))
+		nl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; nl.custom_minimum_size = Vector2(760, 0); r.add_child(nl); return
+	for m in G.roster:
+		var mm: Dictionary = m
+		var b := btn("對 %s 使用（Lv%d　EXP %d/%d）" % [mm.name, int(mm.lv), int(mm.exp), G.EXP_PER_LV], func(): camp_use_item(mm), 760)
+		b.add_theme_font_size_override("font_size", int(20 * fk)); b.disabled = int(mm.lv) >= G.MAX_LV; r.add_child(b)
+
+func camp_use_item(m: Dictionary) -> void:
+	if not G.items.has(item_sel): return
+	var d: Dictionary = G.I[item_sel]
+	var used := item_sel
+	G.use_item(item_sel)
+	var ups: Array = G.add_exp(m, int(d.val))
+	show_items()
+	var msg := lbl("%s 使用了 %s！%s" % [m.name, used, ("升級 %d 次！" % ups.size()) if ups.size() > 0 else "獲得經驗值 %d" % int(d.val)], int(24 * G.font_k()), Color(0.75, 0.05, 0.05))
+	msg.position = Vector2(780, 820); page.add_child(msg)
+
+func shop_test25() -> void:
+	G.test_mode = true
+	G.setup_for_battle(10)
+	G.items["經驗之書"] = 2
+	show_shop(0); shop_who = 0; show_shop(0); await snap("v25_shop_weapon_one")
+	shop_who = -1; show_shop(0); await snap("v25_shop_weapon_all")
+	shop_who = 1; show_shop(1); await snap("v25_shop_armor_one")
+	var m: Dictionary = G.roster[0]; var lv0 := int(m.lv)
+	item_sel = "經驗之書"; show_items(); camp_use_item(m); await snap("v25_camp_item_use")
+	print("SHOPTEST25 roster=%d lv %d->%d book=%d" % [G.roster.size(), lv0, int(m.lv), int(G.items.get("經驗之書", 0))])
+	print("SHOPTEST25 DONE"); get_tree().quit()
