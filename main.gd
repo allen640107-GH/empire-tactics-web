@@ -1467,10 +1467,13 @@ func _unhandled_input(e: InputEvent) -> void:
 			MOUSE_BUTTON_WHEEL_DOWN: target_dist = min(zmax(), target_dist + 1.0 * maxf(1.0, map_k()))
 			MOUSE_BUTTON_RIGHT: cancel()
 			MOUSE_BUTTON_LEFT:
-				if touch_mode: t_press = e.position; return   # 觸控：放開時才判定點擊（拖曳不誤觸）
+				if touch_mode:
+					if not (touch_seen and e.device == InputEvent.DEVICE_ID_EMULATION): t_press = e.position   # 觸控：放開時才判定點擊（拖曳不誤觸）
+					return
 				var c := pick(e.position)
 				if c.x >= 0: on_cell_clicked(c)
 	elif e is InputEventMouseButton and not e.pressed and e.button_index == MOUSE_BUTTON_LEFT and touch_mode:
+		if touch_seen and e.device == InputEvent.DEVICE_ID_EMULATION: return   # v24：有真實觸控事件時，點擊由 touch_tap 處理
 		if t_press.x > -9000 and e.position.distance_to(t_press) < slop() and not t_dragged and not lp_done:
 			var c := fuzzy_pick(t_press)   # v22：以按下位置判定（手指離開時的滑移不改變目標）
 			if c.x >= 0:
@@ -1494,18 +1497,28 @@ var help_lbl: Label
 func touch_input(e: InputEvent) -> void:
 	if not touch_mode: set_touch_mode(true)
 	if e is InputEventScreenTouch:
+		touch_seen = true
 		if e.pressed:
+			# v24：iOS Safari 的觸控 id 是很大的數字且可能前後不一致（網頁端已在 index.js 重新編號；此處再做保險）
 			if touches.is_empty():
 				t_dragged = false; t_press = e.position; t_multi = false; lp_done = false; t_hold = Time.get_ticks_msec()
-			touches[e.index] = e.position
-		else: touches.erase(e.index)
+			touches[e.index] = e.position; touch_ts[e.index] = Time.get_ticks_msec()
+		else:
+			var single := touches.size() <= 1 and not t_multi
+			if touches.has(e.index): touches.erase(e.index)
+			elif touches.size() == 1: touches.clear()   # v24：放開的 id 對不上時視為唯一那根手指
+			touch_ts.erase(e.index)
+			if touches.is_empty(): touch_ts.clear()
+			# v24：點擊直接由觸控放開判定（不依賴瀏覽器的滑鼠模擬）
+			if single and touches.is_empty(): touch_tap(e.position)
 		if touches.size() == 2:
 			# v22：雙指＝縮放／旋轉，鎖定直到全部手指離開（避免放開一指時鏡頭跳動）
 			var p: Array = touches.values(); pinch_d = (p[0] as Vector2).distance_to(p[1]); t_dragged = true; t_multi = true
 			twist_a = ((p[1] as Vector2) - (p[0] as Vector2)).angle(); twist_acc = 0.0
 		if touches.is_empty(): pinch_d = 0.0; t_hold = 0
 	elif e is InputEventScreenDrag:
-		touches[e.index] = e.position
+		if not touches.has(e.index) and touches.size() == 1 and not t_multi: touches.clear()   # v24：id 不一致時沿用同一根手指
+		touches[e.index] = e.position; touch_ts[e.index] = Time.get_ticks_msec()
 		if touches.size() >= 2:
 			var p: Array = touches.values(); var dd := (p[0] as Vector2).distance_to(p[1])
 			if pinch_d > 0.0: target_dist = clamp(target_dist * pinch_d / maxf(dd, 1.0), 10.0, zmax())
@@ -1525,6 +1538,26 @@ func touch_input(e: InputEvent) -> void:
 
 # ---- v22：手感改善工具 ----
 var t_multi := false
+var touch_seen := false
+var touch_ts := {}
+
+func gui_blocks(pos: Vector2, n: Node = null) -> bool:
+	if n == null: n = get_tree().root
+	for ch in n.get_children():
+		if ch is Node3D: continue
+		if ch is CanvasItem and not ch.visible: continue
+		if ch is Control and ch.mouse_filter == Control.MOUSE_FILTER_STOP and ch.get_global_rect().has_point(pos): return true
+		if gui_blocks(pos, ch): return true
+	return false
+
+func touch_tap(pos: Vector2) -> void:
+	if gui_blocks(t_press):
+		t_press = Vector2(-9999, -9999); t_dragged = false; lp_done = false; return
+	if t_press.x > -9000 and pos.distance_to(t_press) < slop() and not t_dragged and not lp_done:
+		var c := fuzzy_pick(t_press)
+		if c.x >= 0:
+			on_hover(c); on_cell_clicked(c)
+	t_press = Vector2(-9999, -9999); t_dragged = false; lp_done = false
 var t_hold := 0
 var lp_done := false
 var twist_a := 0.0
@@ -1595,9 +1628,9 @@ func confirm_pending() -> void:
 func _hold_check() -> void:
 	if not touch_mode or lp_done or t_hold == 0 or t_dragged or touches.size() != 1: return
 	if Time.get_ticks_msec() - t_hold < lp_ms: return
-	lp_done = true
 	var c := pick(t_press); var u = unit_at(c)
-	if u == null: return
+	if u == null: return   # v24：長按空地不算長按（避免低幀率時點擊被吃掉）
+	lp_done = true
 	tcard.panel.visible = true; fill_card(tcard, u, "（長按查看）"); buzz(30); sfx("click", 0.05, -12.0)
 
 func toggle_speed() -> void:
