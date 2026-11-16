@@ -292,7 +292,7 @@ func _ready() -> void:
 	var ff: FontFile = load("res://assets/fonts/NotoSerifTC.ttf")
 	ui_font = FontVariation.new(); ui_font.base_font = ff
 	narr_font = FontVariation.new(); var wk: FontFile = load("res://assets/fonts/WenKaiTC.ttf"); wk.fallbacks = [ff]; narr_font.base_font = wk; narr_font.spacing_glyph = 2
-	ui_font.variation_opentype = {TextServerManager.get_primary_interface().name_to_tag("wght"): 600}
+	ui_font.variation_opentype = {TextServerManager.get_primary_interface().name_to_tag("wght"): 700}
 	font_bold = FontVariation.new(); font_bold.base_font = ff
 	font_bold.variation_opentype = {TextServerManager.get_primary_interface().name_to_tag("wght"): 900}
 	# 同步產生雜訊貼圖（NoiseTexture2D 會在背景執行緒生成，啟動時偶發 heap corruption 閃退）
@@ -462,6 +462,7 @@ func build_env() -> void:
 	sun_base = TH.sun_e
 	add_child(sun)
 	light_fallbacks()
+	build_post()
 	cam_pivot = Node3D.new(); add_child(cam_pivot)
 	cam = Camera3D.new(); cam.fov = 28.0; cam.far = 400.0; cam_pivot.add_child(cam)
 	cam.current = true
@@ -894,7 +895,7 @@ func add_unit(n: String, job: String, team: int, base: Dictionary, w: String, a:
 	ring.mesh = tor; ring.position.y = 0.04; ring.scale = Vector3(1, 0.15, 1)
 	ring.material_override = glow(Color(0.85, 0.25, 1.0) if u.boss else Color(1.0, 0.8, 0.3) if u.get("hero", false) else (Color(0.3, 0.6, 1.0) if team == 0 else Color(1.0, 0.25, 0.15)), 0.45, 1.6)
 	node.add_child(ring); u.ring = ring
-	var lab := Label3D.new(); lab.font = font_bold; lab.font_size = 30; lab.pixel_size = 0.0032 * G.font_k(); lab.outline_size = int(10 * G.font_k()); lab.outline_modulate = Color(0, 0, 0, 1)
+	var lab := Label3D.new(); lab.font = font_bold; lab.font_size = 34; lab.pixel_size = 0.0031 * G.font_k(); lab.outline_size = int(12 * G.font_k()); lab.outline_modulate = Color(0, 0, 0, 1)
 	lab.billboard = BaseMaterial3D.BILLBOARD_ENABLED; lab.position.y = 2.05 * scl; lab.no_depth_test = true
 	lab.modulate = Color(0.8, 0.9, 1) if team == 0 else Color(1, 0.75, 0.68)
 	lab.outline_modulate = Color(0.05, 0.03, 0.02)
@@ -1092,9 +1093,9 @@ func build_ui() -> void:
 	log_label.add_theme_constant_override("outline_size", 7); log_label.vertical_alignment = VERTICAL_ALIGNMENT_BOTTOM
 	log_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; log_label.clip_text = false; log_label.grow_vertical = Control.GROW_DIRECTION_BEGIN
 	ui_root.add_child(log_label)
-	var help := lbl("左鍵 選擇／確定　右鍵・Esc 取消\nQ/E 旋轉　滾輪 縮放　WASD 平移　R 俯角", 15, Color(0.95, 0.92, 0.85), false, true)
-	help.position = Vector2(1236, 14); help.size = Vector2(350, 50); help.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	help.add_theme_constant_override("outline_size", 6)
+	var help := lbl("左鍵 選擇／確定　右鍵・Esc 取消\nQ/E 旋轉　滾輪 縮放　WASD 平移　R 俯角", 17, Color(1.0, 0.97, 0.9), false, true)
+	help.position = Vector2(1186, 12); help.size = Vector2(400, 56); help.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	help.add_theme_constant_override("outline_size", 8)
 	ui_root.add_child(help); help_lbl = help
 	banner_bg = TextureRect.new(); banner_bg.texture = uitex("trail.png"); banner_bg.position = Vector2(0, 130); banner_bg.size = Vector2(1600, 150)
 	banner_bg.stretch_mode = TextureRect.STRETCH_SCALE; banner_bg.modulate = Color(0.15, 0.02, 0.0, 0.0); banner_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -1653,7 +1654,7 @@ func set_touch_mode(on: bool) -> void:
 	if touch_bar != null: touch_bar.visible = on
 	if help_lbl != null:
 		help_lbl.text = "點一下 預覽　再點一次／確定鈕 執行　長按 看資料\n單指拖曳 平移　雙指 縮放・扭轉旋轉" if on else "左鍵 選擇／確定　右鍵・Esc 取消\nQ/E 旋轉　滾輪 縮放　WASD 平移　R 俯角"
-		help_lbl.add_theme_font_size_override("font_size", 18 if on else 15)
+		help_lbl.add_theme_font_size_override("font_size", 18 if on else 17)
 		if on: help_lbl.position.x = 1110; help_lbl.size.x = 470; help_lbl.add_theme_font_size_override("font_size", 15); help_lbl.set_meta("max_k", 1.0)
 
 func build_touch_ui() -> void:
@@ -4135,6 +4136,7 @@ func impact_fx(pos0: Vector3, col: Color, heavy := false) -> void:
 	tw.tween_property(s, "scale", Vector3.ONE * 1.6, 0.18); tw.tween_property(s.material_override, "albedo_color:a", 0.0, 0.2)
 	tw.chain().tween_callback(s.queue_free)
 	flash_light(pos, col, 6.0 if heavy else 3.0)
+	screen_punch(pos, 1.0 if heavy else 0.5)
 	if heavy:
 		var gp := Vector3(pos0.x, pos0.y - 0.6, pos0.z)
 		ground_ring(gp, col, 1.4)
@@ -4159,6 +4161,7 @@ func magic_impact(pos: Vector3, col: Color) -> void:
 	shock_ring(toward_cam(pos), col, 1.3, 0.4)
 	streaks(toward_cam(pos), col.lightened(0.3), 16, 5.0)
 	flash_light(pos, col, 5.0, 0.4)
+	screen_punch(pos, 0.6)
 
 # ================= v15：元素魔法・元素狀態・戰果統計・語音・BGM =================
 const EL_NAME := {"fire": "火", "water": "水", "wind": "風", "earth": "地"}
@@ -5268,6 +5271,42 @@ func light_fallbacks() -> void:
 		env.fog_height_density = 0.0
 		if r_method == "gl_compatibility": sun.shadow_blur = 1.0
 
+# ---------- v26：戰場後製（銳利化／調色／暈影）＋命中衝擊 ----------
+const FX26 := preload("res://v26fx.gd")
+var post_mat: ShaderMaterial
+var punch_amt := 0.0
+var punch_t0 := -100000
+var punch_live := false
+func build_post() -> void:
+	if OS.get_environment("V26POST") == "off" or "--nopost" in OS.get_cmdline_user_args(): return
+	var pl := CanvasLayer.new(); pl.layer = -1; add_child(pl)
+	var pr := ColorRect.new(); pr.set_anchors_preset(Control.PRESET_FULL_RECT); pr.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	post_mat = FX26.mat(FX26.POST); pr.material = post_mat; pl.add_child(pr)
+	if r_method == "gl_compatibility":
+		# 網頁版不支援 Environment 調色：在後製補回對比與飽和，暗部略冷、亮部略暖
+		post_mat.set_shader_parameter("contrast", 1.1); post_mat.set_shader_parameter("sat", 1.14)
+		post_mat.set_shader_parameter("gain", Vector3(1.03, 1.0, 0.95)); post_mat.set_shader_parameter("lift", Vector3(0.0, 0.004, 0.018))
+		post_mat.set_shader_parameter("sharpen", 0.32); post_mat.set_shader_parameter("vig", 0.16)
+	else:
+		post_mat.set_shader_parameter("sat", 1.04); post_mat.set_shader_parameter("sharpen", 0.22); post_mat.set_shader_parameter("vig", 0.1)
+
+func screen_punch(wpos: Vector3, amt: float) -> void:
+	if post_mat == null or cam == null: return
+	var vs := get_viewport().get_visible_rect().size
+	var sp := cam.unproject_position(wpos) / vs if not cam.is_position_behind(wpos) else Vector2(0.5, 0.5)
+	post_mat.set_shader_parameter("punch_c", sp.clamp(Vector2(0.1, 0.1), Vector2(0.9, 0.9)))
+	punch_amt = maxf(amt, punch_now()); punch_t0 = Time.get_ticks_msec()
+
+func punch_now() -> float:
+	var t := (Time.get_ticks_msec() - punch_t0) / 260.0
+	return 0.0 if t >= 1.0 else punch_amt * (1.0 - t) * (1.0 - t)
+
+func post_update() -> void:
+	if post_mat == null: return
+	var v := punch_now()
+	if v > 0.0 or punch_live: post_mat.set_shader_parameter("punch", v)
+	punch_live = v > 0.0
+
 func fx_light(pos: Vector3, col: Color, energy: float, dur: float) -> void:
 	var cap := 4 if r_method == "forward_plus" else 2
 	if fx_lights.size() >= cap: return
@@ -5277,6 +5316,7 @@ func fx_light(pos: Vector3, col: Color, energy: float, dur: float) -> void:
 	tw.tween_callback(func(): fx_lights.erase(l); l.queue_free())
 
 func sprite_lighting(_dt: float) -> void:
+	post_update()
 	if cam == null or sun == null: return
 	var cb: Basis = cam.global_transform.basis
 	var L: Vector3 = sun.global_transform.basis.z.normalized()

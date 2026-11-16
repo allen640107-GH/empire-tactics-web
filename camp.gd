@@ -1,6 +1,7 @@
 extends Control
 # 營地／世界地圖：標題、出擊、商店、隊伍裝備、存檔、結局
 var font: FontFile
+var font_b: FontVariation
 var page: Control
 var info: Label
 var sfxp: AudioStreamPlayer
@@ -27,7 +28,10 @@ const MAP_OFS := Vector2(40, 90)
 
 func _ready() -> void:
 	font = load("res://assets/fonts/NotoSerifTC.ttf")
-	var th := Theme.new(); th.default_font = font; th.default_font_size = 20
+	# v26：介面字改為粗體（Noto Serif TC 可變字重 680），提升小螢幕可讀性
+	font_b = FontVariation.new(); font_b.base_font = font
+	font_b.variation_opentype = {TextServerManager.get_primary_interface().name_to_tag("wght"): 680}
+	var th := Theme.new(); th.default_font = font_b; th.default_font_size = 20
 	for t in ["Button", "OptionButton"]:
 		th.set_stylebox("normal", t, sbt("btn.png", 12, 4)); th.set_stylebox("hover", t, sbt("btn_hover.png", 12, 4))
 		th.set_stylebox("pressed", t, sbt("btn_press.png", 12, 4)); th.set_stylebox("disabled", t, sbt("btn_dis.png", 12, 4))
@@ -67,7 +71,7 @@ func sbt(n: String, m: int, pad := 6) -> StyleBoxTexture:
 func click() -> void:
 	sfxp.stream = load("res://assets/sfx/click.wav"); sfxp.play()
 
-func lbl(t: String, size := 20, col := Color(0.28, 0.17, 0.08)) -> Label:
+func lbl(t: String, size := 20, col := Color(0.2, 0.11, 0.04)) -> Label:
 	var l := Label.new(); l.text = t; l.add_theme_font_size_override("font_size", size); l.add_theme_color_override("font_color", col)
 	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	return l
@@ -129,6 +133,7 @@ func new_page() -> void:
 
 # ---------- 標題（v15：帝國史詩風） ----------
 const FX := preload("res://v15fx.gd")
+const FX26 := preload("res://v26fx.gd")
 var wk: FontFile
 var t_nodes := {}
 var t_time := 0.0
@@ -181,6 +186,8 @@ func show_title() -> void:
 		c.modulate = Color(1.0, 0.82, 0.6, 0.16 + 0.03 * (i % 3)); c.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		c.set_meta("v", 6.0 + 4.0 * (i % 3)); clouds.add_child(c)
 	var rays := ColorRect.new(); rays.set_anchors_preset(Control.PRESET_FULL_RECT); rays.material = FX.mat(FX.RAYS); rays.mouse_filter = Control.MOUSE_FILTER_IGNORE; page.add_child(rays)
+	# v26：太陽鏡頭光暈＋標誌周圍金色閃光
+	var flare := ColorRect.new(); flare.set_anchors_preset(Control.PRESET_FULL_RECT); flare.material = FX26.mat(FX26.FLARE); flare.mouse_filter = Control.MOUSE_FILTER_IGNORE; page.add_child(flare); t_nodes.flare = flare
 	page.add_child(particles(46, 9.0, Vector2(800, 470), Vector2(820, 460), Vector2(4, 14), Color(1.0, 0.86, 0.55, 0.55), Vector2(0.10, 0.32), Vector2(3, -2), 180.0))
 	page.add_child(particles(70, 7.0, Vector2(800, 930), Vector2(860, 20), Vector2(30, 75), Color(1.0, 0.55, 0.2, 0.9), Vector2(0.05, 0.14), Vector2(6, -8)))
 	var vig := ColorRect.new(); vig.set_anchors_preset(Control.PRESET_FULL_RECT); vig.material = FX.mat(FX.VIG); vig.mouse_filter = Control.MOUSE_FILTER_IGNORE; page.add_child(vig)
@@ -204,10 +211,14 @@ func show_title() -> void:
 	var gl := tl("帝國戰記", 150, Color.WHITE, fv); gl.size = Vector2(1600, 190); gl.material = FX.mat(FX.GOLD); gl.add_theme_constant_override("outline_size", 3); gl.add_theme_color_override("font_outline_color", Color(0.22, 0.09, 0.02, 1.0)); logo.add_child(gl)
 	var en := tl("E M P I R E   C H R O N I C L E", 24, Color(0.93, 0.8, 0.52), font); en.size = Vector2(1600, 30); en.position = Vector2(0, 196); glow_lbl(en, Color(0, 0, 0, 0.7), 8); logo.add_child(en)
 	var dv := TextureRect.new(); dv.texture = load("res://assets/v15/divider.png"); dv.expand_mode = TextureRect.EXPAND_IGNORE_SIZE; dv.size = Vector2(760, 38); dv.position = Vector2(420, 226); logo.add_child(dv)
+	var gl2 := particles(26, 2.6, Vector2(800, 110), Vector2(430, 70), Vector2(2, 8), Color(1.0, 0.92, 0.6, 0.95), Vector2(0.12, 0.3), Vector2.ZERO, 180.0)
+	gl2.texture = load("res://assets/ui/star.png"); gl2.angle_min = 0.0; gl2.angle_max = 360.0
+	var gsc := Curve.new(); gsc.add_point(Vector2(0, 0)); gsc.add_point(Vector2(0.5, 1)); gsc.add_point(Vector2(1, 0)); gl2.scale_amount_curve = gsc
+	logo.add_child(gl2)
 	var sub := tl("── 金陽旗的歸途 ──", 38 if G.is_handheld() else 34, Color(0.97, 0.9, 0.74)); sub.size = Vector2(1600, 44); sub.position = Vector2(0, 262); glow_lbl(sub, Color(0, 0, 0, 0.75), 10); logo.add_child(sub)
 	# 選單
 	var fr := NinePatchRect.new(); fr.texture = load("res://assets/v15/menu_frame.png"); fr.patch_margin_left = 44; fr.patch_margin_right = 44; fr.patch_margin_top = 44; fr.patch_margin_bottom = 44
-	var fr_y: float = 850.0 - fr_h; fr.size = Vector2(480, fr_h); fr.position = Vector2(570, fr_y); fr.mouse_filter = Control.MOUSE_FILTER_IGNORE; page.add_child(fr); t_nodes.menu = fr
+	var fr_y: float = 850.0 - fr_h; fr.size = Vector2(480, fr_h); fr.position = Vector2(570, fr_y); fr.mouse_filter = Control.MOUSE_FILTER_IGNORE; fr.material = FX26.mat(FX26.SHEEN); fr.material.set_shader_parameter("sz", fr.size); page.add_child(fr); t_nodes.menu = fr
 	var v := VBoxContainer.new(); v.position = Vector2(40, 30); v.size = Vector2(400, fr_h - 60.0); v.alignment = BoxContainer.ALIGNMENT_CENTER; v.add_theme_constant_override("separation", 6); fr.add_child(v)
 	var glow := StyleBoxTexture.new(); glow.texture = load("res://assets/v15/sel_glow.png")
 	var items := [["新的旅程", func(): G.backup_auto(); G.new_game(); G.set_meta("in_campaign", true); show_prologue()],
@@ -221,12 +232,12 @@ func show_title() -> void:
 	var btns := []
 	for it in items:
 		var b := Button.new(); b.text = it[0]; b.custom_minimum_size = Vector2(400, tbh); b.set_meta("keep_h", true)
-		b.add_theme_font_override("font", wkf()); b.add_theme_font_size_override("font_size", 28)
+		b.add_theme_font_override("font", wkf()); b.add_theme_font_size_override("font_size", 32)
 		for st in ["normal", "disabled"]: b.add_theme_stylebox_override(st, StyleBoxEmpty.new())
 		for st in ["hover", "focus", "pressed", "hover_pressed"]: b.add_theme_stylebox_override(st, glow)
-		b.add_theme_color_override("font_color", Color(0.9, 0.82, 0.64)); b.add_theme_color_override("font_hover_color", Color(1.0, 0.95, 0.78))
+		b.add_theme_color_override("font_color", Color(0.98, 0.9, 0.72)); b.add_theme_color_override("font_hover_color", Color(1.0, 0.97, 0.82))
 		b.add_theme_color_override("font_focus_color", Color(1.0, 0.95, 0.78)); b.add_theme_color_override("font_pressed_color", Color(1, 1, 0.9))
-		b.add_theme_color_override("font_disabled_color", Color(0.48, 0.42, 0.34)); b.add_theme_color_override("font_outline_color", Color(0.1, 0.05, 0.02)); b.add_theme_constant_override("outline_size", 5)
+		b.add_theme_color_override("font_disabled_color", Color(0.48, 0.42, 0.34)); b.add_theme_color_override("font_outline_color", Color(0.08, 0.04, 0.01)); b.add_theme_constant_override("outline_size", 7)
 		var cb: Callable = it[1]
 		b.mouse_entered.connect(func(): if not b.disabled: b.grab_focus())
 		b.focus_entered.connect(func(): t_nodes.sel = b; if t_time > 1.0: tick())
@@ -241,8 +252,8 @@ func show_title() -> void:
 	if G.migrate_msg != "":
 		var mm := tl(G.migrate_msg, 20, Color(0.7, 1.0, 0.7)); mm.size = Vector2(1600, 30); mm.position = Vector2(0, 20); glow_lbl(mm, Color(0, 0, 0, 0.8), 6); page.add_child(mm)
 	var cur := TextureRect.new(); cur.texture = load("res://assets/v15/cursor.png"); cur.size = Vector2(48, 36); cur.expand_mode = TextureRect.EXPAND_IGNORE_SIZE; cur.mouse_filter = Control.MOUSE_FILTER_IGNORE; page.add_child(cur); t_nodes.cur = cur
-	var hint := tl("↑↓ 或滑鼠選擇　　Enter／點擊 決定", 18, Color(0.85, 0.75, 0.55, 0.8)); hint.size = Vector2(1600, 26); hint.position = Vector2(0, 852); glow_lbl(hint, Color(0, 0, 0, 0.8), 6); page.add_child(hint); t_nodes.hint = hint
-	var ver := lbl("v25　©金陽旗工作室", 15, Color(0.8, 0.7, 0.5, 0.6)); ver.position = Vector2(1400, 866); page.add_child(ver)
+	var hint := tl("↑↓ 或滑鼠選擇　　Enter／點擊 決定", 22, Color(0.98, 0.9, 0.72, 0.95)); hint.add_theme_font_override("font", font_b); hint.add_theme_constant_override("outline_size", 5); hint.add_theme_color_override("font_outline_color", Color(0.08, 0.04, 0.02)); hint.size = Vector2(1600, 26); hint.position = Vector2(0, 852); glow_lbl(hint, Color(0, 0, 0, 0.8), 6); page.add_child(hint); t_nodes.hint = hint
+	var ver := lbl("v26　©金陽旗工作室", 18, Color(0.98, 0.9, 0.7, 0.92)); ver.position = Vector2(1360, 862); ver.add_theme_constant_override("outline_size", 5); ver.add_theme_color_override("font_outline_color", Color(0.08, 0.04, 0.02)); page.add_child(ver)
 	# 進場：黑幕淡出、標誌浮現、選單滑入
 	var f := fader(1.0)
 	logo.modulate.a = 0.0; logo.scale = Vector2(1.06, 1.06); fr.modulate.a = 0.0; fr.position.y = fr_y + 40; cur.modulate.a = 0.0; hint.modulate.a = 0.0
